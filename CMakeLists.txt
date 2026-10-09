@@ -36,6 +36,7 @@ set(CMAKE_Fortran_FLAGS_RELEASE "\
     -DNDEBUG")
 
 add_library(fast_Fourier STATIC
+            src/precision_mod.f90
             src/fft.f90
 )
 
