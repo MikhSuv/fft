@@ -23,6 +23,7 @@ set(CMAKE_Fortran_FLAGS_DEBUG "\
     -ffpe-trap=invalid,zero,overflow \
     -finit-real=snan \
     -fstack-protector-strong \
+    -std=f2023 \
     -DDEBUG")
 
 
@@ -33,6 +34,7 @@ set(CMAKE_Fortran_FLAGS_RELEASE "\
     -ftree-vectorize \
     -ffast-math \
     -fno-trapping-math \
+    -std=f2023 \
     -DNDEBUG")
 
 add_library(fast_Fourier STATIC
