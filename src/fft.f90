@@ -2,6 +2,8 @@ module fft
   use precision_mod
   implicit none
   ! private
+  real(dp), parameter ::pi = 4.0_dp * atan(1.0_dp)
+  complex(dp), parameter :: i = (0.0_dp, 1.0_dp)
 
   ! public :: say_hello
 contains
@@ -69,4 +71,25 @@ contains
     close(ounit)
 
   end subroutine write_result
+
+  function make_twiddles(n, inverse) result(w)
+    integer, intent(in) :: n
+    logical, intent(in) :: inverse
+    complex(dp), allocatable :: w(:)
+    real(dp) :: sgn
+    integer :: k
+
+    if (inverse) then
+      sgn = 1.0_dp
+    else 
+      sgn = -1.0_dp
+    endif
+
+    allocate(w(n/2))
+    
+    do k = 1, n/2
+      w(k) = exp(sgn * 2.0_dp * pi * i * real(k,dp)/real(n,dp))
+    end do
+
+  end function make_twiddles
 end module fft
