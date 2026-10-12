@@ -67,3 +67,5 @@ vcpkg_installed/
 Testing/
 .cache/
 result.dat
+abs.dat
+data.dat
