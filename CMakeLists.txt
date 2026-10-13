@@ -4,7 +4,7 @@ project(fft
         DESCRIPTION "Fast Fourier Transform"
         LANGUAGES Fortran)
 
-set(CMAKE_Fortran_MODULE_DERECTORY ${CMAKE_CURRENT_BINARY_DIR}/modules)
+set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/modules)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Debug")
@@ -54,7 +54,12 @@ target_link_libraries(fft-test PRIVATE fast_Fourier)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  target_link_options(${PROJECT_NAME} PRIVATE
+  # PUBLIC so that every executable linking the library also links the
+  # sanitizer runtime it was compiled with
+  target_link_options(fast_Fourier PUBLIC
         -fsanitize=address,undefined
     )
 endif()
+
+enable_testing()
+add_test(NAME make_twiddles COMMAND fft-test)
