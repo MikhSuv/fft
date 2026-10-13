@@ -47,10 +47,10 @@ add_executable(fft
 )
 target_link_libraries(fft PRIVATE fast_Fourier)
 
-add_executable(fft-test
-              test/check.f90
+add_executable(test_make_twiddles
+              test/test_make_twiddles.f90
 )
-target_link_libraries(fft-test PRIVATE fast_Fourier)
+target_link_libraries(test_make_twiddles PRIVATE fast_Fourier)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -62,4 +62,4 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 enable_testing()
-add_test(NAME make_twiddles COMMAND fft-test)
+add_test(NAME make_twiddles COMMAND test_make_twiddles)
