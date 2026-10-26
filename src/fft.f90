@@ -1,95 +1,31 @@
+! Fast Fourier transform of complex data, decimation in frequency, in place.
+!
+! The transform is the unitary DFT.
+!
+!   y_k = (1/sqrt(n)) * sum_{j=0}^{n-1} x_j * exp(-+ 2*pi*i*j*k/n),
+!
+! where the "-" sign corresponds to the forward transform,
+! "+" to the inverse one. 
 module fft
-  use precision_mod
+  use precision_mod, only: dp
   implicit none
-  ! private
-  real(dp), parameter ::pi = 4.0_dp * atan(1.0_dp)
+  private
+  public :: make_twiddles, fft_transform, bit_reverse_permute
+
+  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
   ! Imaginary unit
-  complex(dp), parameter :: im_u = (0.0_dp, 1.0_dp)
+  complex(dp), parameter :: iu = (0.0_dp, 1.0_dp)
 
-  ! public :: say_hello
 contains
-  ! Reads a complex signal from a text file.
-  !
-  ! File layout:
-  !   line 1      : "# <n>" -- header, the count of samples follows the '#'
-  !   lines 2..n+1: "<re> <im>" -- one sample per line
-  !
-  ! The result is padded up to the next power of two with zeros
-  function read_data(filename) result(x)
-    character(len=*), intent(in) :: filename
-    complex(dp), allocatable :: x(:)
-    integer :: n, sz
-    real(dp) :: re, im
 
-    integer :: iostatus, iunit, it
-    character(len=256) :: line
-    open(newunit=iunit, file=filename, status='old', &
-    action = 'read', iostat=iostatus)
+  ! True when n is a positive power of two
+  pure logical function is_pow2(n)
+    integer, intent(in) :: n
+    is_pow2 = n >= 1 .and. iand(n, n - 1) == 0
+  end function is_pow2
 
-    if (iostatus /= 0) then
-      error stop 'Error occured while opening file'
-    end if
-    read(iunit, '(a)', iostat=iostatus) line
-    if (iostatus /= 0) then
-      error stop 'Error occured while reading line'
-    end if
-    ! Skip the leading '#' of the header and parse the sample count
-    read(line(2:), *) n
-
-    ! Round n up to the next power of two:
-    ! BIT_SIZE(n) - leadz(n-1) is the index of the highest set bit of n-1,
-    ! so 1 shifted there is the smallest power of two >= n
-    sz = shiftl(1, BIT_SIZE(n) - leadz(n-1))
-
-    ! Allocate a zero-padded buffer of power-of-two length
-    allocate(x(sz), source = cmplx(0.0_dp, 0.0_dp, kind=dp))
-
-    do it = 1, n
-      read(iunit, *) re, im
-      x(it) = cmplx(re, im, kind=dp)
-    end do
-
-    close(iunit)
-  end function read_data
-
-  ! Writes a complex array to two plain-text files in the current directory:
-  !   result.dat -- "<re> <im>" per line
-  !   abs.dat    -- "|x|" per line
-  subroutine write_result(x)
-    complex(dp), intent(in) :: x(:)
-    integer :: n
-    integer :: it
-    integer :: ounit, iostatus
-
-    open(newunit=ounit,file="result.dat", &
-     action='write', iostat=iostatus)
-
-    if (iostatus /= 0) then
-      error stop 'Error occured while opening file'
-    end if
-    
-    n = size(x)
-
-    do it = 1, n
-      write(ounit, '(*(e23.15, 1x))') x(it)%re, x(it)%im
-    end do
-    close(ounit)
-
-    open(newunit=ounit,file="abs.dat", &
-     action='write', iostat=iostatus)
-
-    if (iostatus /= 0) then
-      error stop 'Error occured while opening file'
-    end if
-    do it = 1, n
-      write(ounit, '(*(e23.15, 1x))') abs(x(it))
-    end do
-    close(ounit)
-
-  end subroutine write_result
-
-  ! Builds the table of twiddle factors w(k) = exp(sgn * 2*pi*i * k/n)
-  ! for k = 1, 2, ..., n/2.
+  ! Builds the table of twiddle factors w(k+1) = exp(sgn * 2*pi*i * k/n)
+  ! for k = 0, ..., n/2 - 1, i.e. W_n^k of the assignment notation.
   !
   !   inverse = .false. -> sgn = -1: forward transform
   !   inverse = .true.  -> sgn = +1: inverse transform
@@ -97,24 +33,132 @@ contains
     integer, intent(in) :: n
     logical, intent(in) :: inverse
     complex(dp), allocatable :: w(:)
-    real(dp) :: sgn
+    real(dp) :: sgn, coef
     integer :: k
 
+    if (n < 2 .or. .not. is_pow2(n)) then
+      error stop 'make_twiddles: n must be a power of two, n >= 2'
+    end if
+
     ! Sign of the exponent: +1 for the inverse transform, -1 for the forward one
-    if (inverse) then
-      sgn = 1.0_dp
-    else 
-      sgn = -1.0_dp
-    endif
+    sgn = merge(1.0_dp, -1.0_dp, inverse)
+    coef = sgn * 2.0_dp * pi / real(n, dp)
 
-    allocate(w(n/2))
-    
-    do k = 1, n/2
-      ! k/n cast to real to avoid integer division
-      w(k) = exp(sgn * 2.0_dp * pi * im_u * real(k,dp)/real(n,dp))
+    allocate(w(n / 2))
+    !$omp parallel do schedule(static)
+    do k = 0, n / 2 - 1
+      w(k + 1) = exp(iu * coef * real(k, dp))
     end do
-
+    !$omp end parallel do
   end function make_twiddles
 
+  ! Decimation-in-frequency butterflies, in place.
+  !
+  ! Block of length m with half h = m/2, for j = 0..h-1:
+  !   x(j)   <- x(j) + x(j+h)
+  !   x(j+h) <- (x(j) - x(j+h)) * W_m^j,   W_m^j = W_n^(j*n/m)
+  ! The stages run for m = n, n/2, ..., 2.
+  ! The output is in bit-reversed order.
+  ! Table layout: w(k+1) = W_n^k.
+  subroutine dif_stages(x, w)
+    complex(dp), intent(inout) :: x(:)
+    complex(dp), intent(in) :: w(:)
+    integer :: n, m, h, stride
+    integer :: s, j
+    complex(dp) :: a, b
+
+    n = size(x)
+    m = n
+
+    do while (m >= 2)
+      h = m / 2
+      stride = n / m
+
+      !$omp parallel do collapse(2) private(j, a, b) schedule(static)
+      do s = 0, n - 1, m
+        do j = 0, h - 1
+          a = x(s + j + 1)
+          b = x(s + j + h + 1)
+          x(s + j + 1) = a + b
+          x(s + j + h + 1) = (a - b) * w(j * stride + 1)
+        end do
+      end do
+      !$omp end parallel do
+      m = h
+    end do
+  end subroutine dif_stages
+
+  ! Bit-reversal permutation of x, in place.
+  ! Precondition: size(x) is a power of two (checked).
+  subroutine bit_reverse_permute(x)
+    complex(dp), intent(inout) :: x(:)
+    integer :: n, i, j
+    complex(dp) :: t
+
+    n = size(x)
+    if (.not. is_pow2(n)) then
+      error stop 'bit_reverse_permute: size(x) must be a power of two'
+    end if
+
+    !$omp parallel do private(j, t) schedule(static)
+    do i = 0, n - 1
+      j = reversed_bits(i, n)
+      if (i < j) then
+        t = x(i + 1)
+        x(i + 1) = x(j + 1)
+        x(j + 1) = t
+      end if
+    end do
+    !$omp end parallel do
+  end subroutine bit_reverse_permute
+
+  ! Reverses the p significant bit positions of i, where n = 2^p is the
+  ! transform length and i = 0..n-1, i.e. D_p(i) of the bit-reversal
+  ! permutation (the leading zeros of i land in the high positions)
+  pure integer function reversed_bits(i, n) result(r)
+    integer, intent(in) :: i, n
+    integer :: k, p
+
+    ! p = log2(n)
+    p = 0
+    k = n
+    do while (k > 1)
+      p = p + 1
+      k = shiftr(k, 1)
+    end do
+
+    ! Reversal over all p bits, low-order zeros included
+    r = 0
+    k = i
+    do while (p > 0)
+      r = shiftl(r, 1) + iand(k, 1)
+      k = shiftr(k, 1)
+      p = p - 1
+    end do
+  end function reversed_bits
+
+  ! fft_transform(x, inverse):
+  !   inverse = .false. -> forward transform (sign "-")
+  !   inverse = .true.  -> inverse transform (sign "+")
+  ! Both directions are scaled by the unitary factor 1/sqrt(n).
+  subroutine fft_transform(x, inverse)
+    complex(dp), intent(inout) :: x(:)
+    logical, intent(in) :: inverse
+    complex(dp), allocatable :: w(:)
+    integer :: n
+
+    n = size(x)
+    if (n == 1) return ! Degenerate one-point transform is the identity
+    if (.not. is_pow2(n)) then
+      error stop 'fft_transform: size(x) must be a power of two'
+    end if
+
+    w = make_twiddles(n, inverse)
+    call dif_stages(x, w)
+    call bit_reverse_permute(x)
+
+    ! Unitary scaling
+    x = x / sqrt(real(n, dp))
+  end subroutine fft_transform
 
 end module fft
