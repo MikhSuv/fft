@@ -23,7 +23,6 @@ program test_make_twiddles
   call test_conjugate_pair()
   call test_recurrence()
   call test_last_element()
-  call test_odd_size()
 
   print '(a,i0,a,i0)', 'passed: ', npass, ', failed: ', nfail
   if (nfail > 0) then
@@ -52,31 +51,34 @@ contains
     end do
   end subroutine test_sizes
 
-  ! Closed-form values that do not depend on the implementation of exp()
+  ! Table layout verified here: w(k+1) = exp(sgn * 2*pi*i * k/n) with
+  ! k = 0, ..., n/2-1, so w(1) = 1, and the factors needed by the DIF
+  ! butterflies are w(j*stride + 1) = W_m^j = W_n^(j*n/m)
   subroutine test_known_values()
     complex(dp), allocatable :: w(:)
 
-    ! n = 4, forward: exp(-i*pi/2) = -i, exp(-i*pi) = -1
+    ! n = 4, forward: w(1) = W_4^0 = 1, w(2) = W_4^1 = -i
     w = make_twiddles(4, .false.)
-    call check_close(w(1), cmplx(0.0_dp, -1.0_dp, kind=dp), 'n=4 fwd w(1) = -i')
-    call check_close(w(2), cmplx(-1.0_dp, 0.0_dp, kind=dp), 'n=4 fwd w(2) = -1')
+    call check_close(w(1), cmplx(1.0_dp, 0.0_dp, kind=dp), 'n=4 fwd w(1) = 1')
+    call check_close(w(2), cmplx(0.0_dp, -1.0_dp, kind=dp), 'n=4 fwd w(2) = -i')
     deallocate(w)
 
-    ! n = 4, inverse: exp(+i*pi/2) = +i, exp(+i*pi) = -1
+    ! n = 4, inverse: w(1) = W_4^0 = 1, w(2) = W_4^1 = +i
     w = make_twiddles(4, .true.)
-    call check_close(w(1), cmplx(0.0_dp, 1.0_dp, kind=dp), 'n=4 inv w(1) = +i')
-    call check_close(w(2), cmplx(-1.0_dp, 0.0_dp, kind=dp), 'n=4 inv w(2) = -1')
+    call check_close(w(1), cmplx(1.0_dp, 0.0_dp, kind=dp), 'n=4 inv w(1) = 1')
+    call check_close(w(2), cmplx(0.0_dp, 1.0_dp, kind=dp), 'n=4 inv w(2) = +i')
     deallocate(w)
 
-    ! n = 2, forward: exp(-i*pi) = -1
+    ! n = 2, forward: the only factor is W_2^0 = 1
     w = make_twiddles(2, .false.)
-    call check_close(w(1), cmplx(-1.0_dp, 0.0_dp, kind=dp), 'n=2 fwd w(1) = -1')
+    call check_close(w(1), cmplx(1.0_dp, 0.0_dp, kind=dp), 'n=2 fwd w(1) = 1')
     deallocate(w)
 
-    ! n = 8, forward: exp(-i*pi/4) = (sqrt(2)/2) * (1 - i)
+    ! n = 8, forward: w(1) = 1, w(2) = W_8^1 = (1 - i)/sqrt(2)
     w = make_twiddles(8, .false.)
-    call check_close(w(1), &
-      cmplx(sqrt(0.5_dp), -sqrt(0.5_dp), kind=dp), 'n=8 fwd w(1) = (1-i)/sqrt(2)')
+    call check_close(w(1), cmplx(1.0_dp, 0.0_dp, kind=dp), 'n=8 fwd w(1) = 1')
+    call check_close(w(2), &
+      cmplx(sqrt(0.5_dp), -sqrt(0.5_dp), kind=dp), 'n=8 fwd w(2) = (1-i)/sqrt(2)')
     deallocate(w)
   end subroutine test_known_values
 
@@ -109,7 +111,7 @@ contains
       allocate(expected(n/2))
 
       do k = 1, n/2
-        th = 2.0_dp * pi * real(k, dp) / real(n, dp)
+        th = 2.0_dp * pi * real(k - 1, dp) / real(n, dp)
         expected(k) = cmplx(cos(th), -sin(th), kind=dp)
       end do
       w = make_twiddles(n, .false.)
@@ -120,7 +122,7 @@ contains
 
       ! Inverse factors are the mirror image: exp(+i*theta)
       do k = 1, n/2
-        th = 2.0_dp * pi * real(k, dp) / real(n, dp)
+        th = 2.0_dp * pi * real(k - 1, dp) / real(n, dp)
         expected(k) = cmplx(cos(th), sin(th), kind=dp)
       end do
       w = make_twiddles(n, .true.)
@@ -153,7 +155,8 @@ contains
     deallocate(wf, wi)
   end subroutine test_conjugate_pair
 
-  ! Twiddle factors form a geometric progression: w(k+1) = w(k) * w(1)
+  ! Twiddle factors form a geometric progression with ratio w(2) = W_n^±1:
+  ! w(k+1) = w(k) * w(2)
   subroutine test_recurrence()
     integer, parameter :: n = 128
     complex(dp), allocatable :: w(:)
@@ -163,41 +166,40 @@ contains
     w = make_twiddles(n, .false.)
     ok = .true.
     do k = 1, n/2 - 1
-      if (abs(w(k + 1) - w(k) * w(1)) > tol) ok = .false.
+      if (abs(w(k + 1) - w(k) * w(2)) > tol) ok = .false.
     end do
-    call check_true(ok, 'w(k+1) == w(k)*w(1)')
+    call check_true(ok, 'w(k+1) == w(k)*w(2)')
     deallocate(w)
   end subroutine test_recurrence
 
-  ! For even n the half-turn factor w(n/2) = exp(+/-i*pi) equals -1
+  ! The first factor is exactly one in both directions and for every size;
+  ! the quarter-turn factor at index n/4 is +/-i
   subroutine test_last_element()
-    integer, parameter :: nsizes(*) = [16, 1024]
+    integer, parameter :: nsizes(*) = [2, 4, 8, 16, 1024]
     complex(dp), allocatable :: w(:)
-    integer :: j, n
+    character(len=9) :: dir
+    logical :: inverse
+    real(dp) :: sgn
+    integer :: j, k, n
 
     do j = 1, size(nsizes)
       n = nsizes(j)
 
-      w = make_twiddles(n, .false.)
-      call check_close(w(n/2), cmplx(-1.0_dp, 0.0_dp, kind=dp), &
-        'w(n/2) == -1, forward, n = ' // trim(itoa(n)))
-      deallocate(w)
-
-      w = make_twiddles(n, .true.)
-      call check_close(w(n/2), cmplx(-1.0_dp, 0.0_dp, kind=dp), &
-        'w(n/2) == -1, inverse, n = ' // trim(itoa(n)))
-      deallocate(w)
+      do k = 1, 2
+        inverse = k == 2
+        sgn = merge(1.0_dp, -1.0_dp, inverse)
+        dir = merge('inverse ', 'forward ', inverse)
+        w = make_twiddles(n, inverse)
+        call check_close(w(1), cmplx(1.0_dp, 0.0_dp, kind=dp), &
+          'w(1) == 1, ' // trim(dir) // ', n = ' // trim(itoa(n)))
+        if (n >= 4) then
+          call check_close(w(n/4 + 1), cmplx(0.0_dp, sgn, kind=dp), &
+            'w(n/4+1) == +/-i, ' // trim(dir) // ', n = ' // trim(itoa(n)))
+        end if
+        deallocate(w)
+      end do
     end do
   end subroutine test_last_element
-
-  ! Documented truncation: for an odd n only floor(n/2) factors are produced
-  subroutine test_odd_size()
-    complex(dp), allocatable :: w(:)
-
-    w = make_twiddles(6, .false.)
-    call check_true(size(w) == 3, 'odd n=6 gives floor(n/2) = 3 factors')
-    deallocate(w)
-  end subroutine test_odd_size
 
   subroutine check_true(cond, name)
     logical, intent(in) :: cond
