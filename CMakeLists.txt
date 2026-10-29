@@ -6,6 +6,8 @@ project(fft
 
 set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/modules)
 
+find_package(OpenMP REQUIRED COMPONENTS Fortran)
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Debug")
   # set(CMAKE_BUILD_TYPE "Release")
@@ -39,19 +41,23 @@ set(CMAKE_Fortran_FLAGS_RELEASE "\
 
 add_library(fast_Fourier STATIC
             src/precision_mod.f90
+            src/iofft_mod.f90
             src/fft.f90
 )
+
+target_link_libraries(fast_Fourier PUBLIC OpenMP::OpenMP_Fortran)
 
 add_executable(fft
               app/main.f90
 )
 target_link_libraries(fft PRIVATE fast_Fourier)
 
-add_executable(test_make_twiddles
-              test/test_make_twiddles.f90
-)
-target_link_libraries(test_make_twiddles PRIVATE fast_Fourier)
-
+foreach(t IN ITEMS test_make_twiddles test_fft_dft test_fft_identity test_bit_reverse)
+  add_executable(${t}
+              test/${t}.f90
+  )
+  target_link_libraries(${t} PRIVATE fast_Fourier)
+endforeach()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   # PUBLIC so that every executable linking the library also links the
@@ -62,4 +68,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 enable_testing()
-add_test(NAME make_twiddles COMMAND test_make_twiddles)
+foreach(t IN ITEMS test_make_twiddles test_fft_dft test_fft_identity test_bit_reverse)
+  add_test(NAME ${t} COMMAND ${t})
+endforeach()
