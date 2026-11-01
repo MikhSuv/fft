@@ -1,9 +1,4 @@
-! Unit tests of fft::bit_reverse_permute() against an independently
-! written reference that reverses the bits by mask weights. A check
-! fails either when a wrong value is produced or when the routine
-! crashes (bounds/FPE are caught by the Debug build flags). The program
-! exits with a non-zero status if at least one check failed, so it works
-! with both `ctest` and `fpm test`.
+! Unit tests of fft::bit_reverse_permute()
 program test_bit_reverse
   use precision_mod, only: dp
   use fft, only: bit_reverse_permute
@@ -41,9 +36,7 @@ contains
   end function ref_bitrev
 
   ! After the permutation each input value must sit exactly at the
-  ! bit-reversed position of its index (values are copied verbatim, so
-  ! the comparison is exact)
-  subroutine test_matches_reference(nsizes)
+  ! bit-reversed position of its index  subroutine test_matches_reference(nsizes)
     integer, intent(in) :: nsizes(:)
     complex(dp), allocatable :: x(:), y(:)
     logical :: ok
