@@ -1,13 +1,4 @@
 ! Compares fft_transform against the direct O(n^2) evaluation of the DFT
-! from the assignment,
-!
-!   y_k = (1/sqrt(n)) * sum_j x_j * exp(-+ 2*pi*i*j*k/n),
-!
-! for pseudo-random complex data in both directions. A check fails either
-! when the error exceeds the tolerance or when the routine crashes
-! (bounds/FPE are caught by the Debug build flags). The program exits with
-! a non-zero status if at least one check failed, so it works with both
-! `ctest` and `fpm test`.
 program test_fft_dft
   use precision_mod, only: dp
   use fft, only: fft_transform
@@ -88,7 +79,7 @@ contains
     end do
   end subroutine fill_random
 
-  ! Direct sum of the assignment formula; sgn picks the exponent sign
+  ! Direct dft 
   function naive_dft(x, inverse) result(y)
     complex(dp), intent(in) :: x(:)
     logical, intent(in) :: inverse

@@ -1,9 +1,4 @@
 ! Unit tests for fft::make_twiddles().
-!
-! A check fails either when a wrong value is produced or when the routine
-! crashes (bounds/FPE are caught by the Debug build flags). The program
-! exits with a non-zero status if at least one check failed, so it works
-! with both `ctest` and `fpm test`.
 program test_make_twiddles
   use precision_mod
   use fft, only: make_twiddles
