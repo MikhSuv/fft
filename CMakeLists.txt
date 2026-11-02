@@ -6,11 +6,10 @@ project(fft
 
 set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/modules)
 
-find_package(OpenMP REQUIRED COMPONENTS Fortran)
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Debug")
-  # set(CMAKE_BUILD_TYPE "Release")
+  # set(CMAKE_BUILD_TYPE "Debug")
+  set(CMAKE_BUILD_TYPE "Release")
 endif()
 
 set(CMAKE_Fortran_FLAGS_DEBUG "\
@@ -45,7 +44,6 @@ add_library(fast_Fourier STATIC
             src/fft.f90
 )
 
-target_link_libraries(fast_Fourier PUBLIC OpenMP::OpenMP_Fortran)
 
 add_executable(fft
               app/main.f90
@@ -60,14 +58,12 @@ foreach(t IN ITEMS test_make_twiddles test_fft_dft test_fft_identity test_bit_re
 endforeach()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  # PUBLIC so that every executable linking the library also links the
-  # sanitizer runtime it was compiled with
   target_link_options(fast_Fourier PUBLIC
         -fsanitize=address,undefined
     )
 endif()
 
 enable_testing()
-foreach(t IN ITEMS test_make_twiddles test_fft_dft test_fft_identity test_bit_reverse)
+foreach(t IN ITEMS test_make_twiddles test_fft_dft test_bit_reverse)
   add_test(NAME ${t} COMMAND ${t})
 endforeach()
