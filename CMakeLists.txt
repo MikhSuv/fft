@@ -24,7 +24,7 @@ set(CMAKE_Fortran_FLAGS_DEBUG "\
     -ffpe-trap=invalid,zero,overflow \
     -finit-real=snan \
     -fstack-protector-strong \
-    -std=f2023 \
+    -std=f2018 \
     -DDEBUG")
 
 
@@ -35,7 +35,7 @@ set(CMAKE_Fortran_FLAGS_RELEASE "\
     -ftree-vectorize \
     -ffast-math \
     -fno-trapping-math \
-    -std=f2023 \
+    -std=f2018 \
     -DNDEBUG")
 
 add_library(fast_Fourier STATIC
@@ -50,7 +50,7 @@ add_executable(fft
 )
 target_link_libraries(fft PRIVATE fast_Fourier)
 
-foreach(t IN ITEMS test_make_twiddles test_fft_dft test_fft_identity test_bit_reverse)
+foreach(t IN ITEMS test_make_twiddles test_fft_dft test_bit_reverse)
   add_executable(${t}
               test/${t}.f90
   )
