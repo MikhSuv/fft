@@ -37,6 +37,7 @@ contains
 
   ! After the permutation each input value must sit exactly at the
   ! bit-reversed position of its index  subroutine test_matches_reference(nsizes)
+  subroutine test_matches_reference(nsizes)
     integer, intent(in) :: nsizes(:)
     complex(dp), allocatable :: x(:), y(:)
     logical :: ok
