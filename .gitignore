@@ -66,6 +66,3 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
-result.dat
-abs.dat
-data.dat
